@@ -5,26 +5,45 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { ArrowLeft, Search, Calendar, MapPin, Building2, TrendingUp } from "lucide-react";
-import { getStoredProjects } from "../data/mockData";
+import { projectsApi, applicationsApi } from "../lib/supabase";
 
 const ProjectList = () => {
   const [projects, setProjects] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalApplications: 0,
+    monthlyMatches: 0
+  });
 
   useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      const storedProjects = getStoredProjects();
-      setProjects(storedProjects.filter(p => p.status === 'public'));
-      setLoading(false);
-    }, 500);
+    loadProjects();
   }, []);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      const projectsData = await projectsApi.getPublicProjects();
+      setProjects(projectsData || []);
+      
+      // Load application stats
+      const allApplications = await applicationsApi.getAllApplications();
+      setStats({
+        totalApplications: allApplications?.length || 0,
+        monthlyMatches: 8 // Mock value for now
+      });
+    } catch (error) {
+      console.error('Error loading projects:', error);
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredProjects = projects.filter(project =>
     project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     project.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    project.internal_tag.toLowerCase().includes(searchTerm.toLowerCase())
+    (project.internal_tag && project.internal_tag.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const formatDate = (dateString) => {
@@ -121,14 +140,14 @@ const ProjectList = () => {
             <div className="bg-white/60 backdrop-blur-sm rounded-lg p-4">
               <div className="flex items-center justify-center mb-2">
                 <TrendingUp className="h-6 w-6 text-[#EC4FAF] mr-2" />
-                <span className="text-2xl font-bold text-gray-900">32</span>
+                <span className="text-2xl font-bold text-gray-900">{stats.totalApplications}</span>
               </div>
               <p className="text-sm text-gray-600">今月の応募数</p>
             </div>
             <div className="bg-white/60 backdrop-blur-sm rounded-lg p-4">
               <div className="flex items-center justify-center mb-2">
                 <MapPin className="h-6 w-6 text-[#066FF2] mr-2" />
-                <span className="text-2xl font-bold text-gray-900">8</span>
+                <span className="text-2xl font-bold text-gray-900">{stats.monthlyMatches}</span>
               </div>
               <p className="text-sm text-gray-600">今月の成約数</p>
             </div>

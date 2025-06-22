@@ -9,7 +9,7 @@ import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
 import { ArrowLeft, Calendar, Mail, MessageSquare, Building2, Users, Send } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
-import { getProjectById, getApplicationsByProjectId, saveApplication } from "../data/mockData";
+import { projectsApi, applicationsApi } from "../lib/supabase";
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -27,17 +27,26 @@ const ProjectDetail = () => {
   });
 
   useEffect(() => {
-    const loadProject = () => {
-      const projectData = getProjectById(id);
-      const projectApplications = getApplicationsByProjectId(id);
+    loadProjectData();
+  }, [id]);
+
+  const loadProjectData = async () => {
+    try {
+      setLoading(true);
+      const [projectData, applicationsData] = await Promise.all([
+        projectsApi.getProjectById(id),
+        applicationsApi.getApplicationsByProjectId(id)
+      ]);
       
       setProject(projectData);
-      setApplications(projectApplications);
+      setApplications(applicationsData || []);
+    } catch (error) {
+      console.error('Error loading project data:', error);
+      setProject(null);
+    } finally {
       setLoading(false);
-    };
-
-    loadProject();
-  }, [id]);
+    }
+  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
@@ -96,11 +105,8 @@ const ProjectDetail = () => {
     }
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Save application
-      const newApplication = saveApplication({
+      // Create application via Supabase
+      const newApplication = await applicationsApi.createApplication({
         project_id: id,
         ...applicationData
       });

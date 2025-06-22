@@ -8,7 +8,7 @@ import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { ArrowLeft, Upload, Mail, MessageSquare, Calendar, Tag } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
-import { saveProject } from "../data/mockData";
+import { projectsApi } from "../lib/supabase";
 
 const PostProject = () => {
   const navigate = useNavigate();
@@ -61,11 +61,8 @@ const PostProject = () => {
     }
 
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Save to mock storage
-      const newProject = saveProject(formData);
+      // Create project via Supabase
+      const newProject = await projectsApi.createProject(formData);
       
       toast({
         title: "案件を掲載しました！",
