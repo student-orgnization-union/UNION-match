@@ -1,0 +1,10 @@
+{
+  "css.validate": true,
+  "css.lint.unknownAtRules": "ignore",
+  "postcss.validate": true,
+  "tailwindCSS.experimental.configFile": "tailwind.config.ts",
+  "editor.quickSuggestions": {
+    "strings": "on"
+  },
+  "css.customData": [".vscode/css-custom-data.json"]
+}
