@@ -8,13 +8,13 @@ export function SiteHeader() {
       <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
         <div className="glass-panel flex h-16 items-center justify-between rounded-full px-4 py-2 sm:px-6">
           <Link href="/" className="flex items-center gap-3" aria-label="UNION Match ホーム">
-            <div className="relative h-10 w-[160px] sm:h-11 sm:w-[220px]">
+            <div style={{ position: 'relative', width: '160px', height: '40px' }}>
               <Image
                 src="/images/for-header.png"
                 alt="UNION Match ロゴ"
                 fill
                 sizes="(max-width: 640px) 160px, 220px"
-                className="object-contain"
+                className="object-contain object-left"
                 priority
               />
             </div>

@@ -17,12 +17,13 @@ export function SiteFooter() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="glass-panel grid gap-10 rounded-3xl px-6 py-8 sm:px-10 md:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-6">
-            <div className="relative h-12 w-[220px] sm:h-14 sm:w-[280px]">
+            <div style={{ position: 'relative', width: '220px', height: '48px' }}>
               <Image
                 src="/images/for-footer.png"
                 alt="UNION Match ロゴ"
                 fill
-                className="object-contain"
+                sizes="(max-width: 640px) 220px, 280px"
+                className="object-contain object-left"
                 priority
               />
             </div>
@@ -30,17 +31,17 @@ export function SiteFooter() {
               学生団体と企業が共創する未来を描くマッチング・プラットフォーム。案件の投稿から応募、承認までをシームレスに支援します。
             </p>
             <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.22em] text-indigo-200">
-              <span>Students</span>
+              <span>学生団体</span>
               <span className="text-slate-500">•</span>
-              <span>Companies</span>
+              <span>企業</span>
               <span className="text-slate-500">•</span>
-              <span>UNION Team</span>
+              <span>UNION運営</span>
             </div>
           </div>
 
           <div className="flex flex-col justify-between gap-8">
             <div className="space-y-4">
-              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">NAVIGATION</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">ナビゲーション</p>
               <nav className="grid gap-3 text-sm text-slate-300">
                 {footerNav.map((item) => (
                   <Link key={item.href} href={item.href} className="transition hover:text-white">
@@ -50,7 +51,7 @@ export function SiteFooter() {
               </nav>
             </div>
             <div className="space-y-3">
-              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Get in touch</p>
+              <p className="text-xs uppercase tracking-[0.25em] text-slate-400">お問い合わせ</p>
               <Button
                 asChild
                 className="union-gradient union-glow h-11 w-full rounded-xl text-sm font-semibold"
