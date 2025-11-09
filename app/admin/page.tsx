@@ -14,12 +14,12 @@ import {
   ShieldCheck,
   Sparkles,
   X,
+  Eye,
 } from 'lucide-react'
 
 import { createClient } from '@/lib/supabase/client'
-import SiteFooter from '@/components/site-footer'
-import SiteHeader from '@/components/site-header'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -110,6 +110,18 @@ function userHasAdminRole(user: Session['user'] | null | undefined): boolean {
 
   const adminFlag = user.app_metadata?.is_admin ?? user.user_metadata?.is_admin ?? user.user_metadata?.admin
   if (adminFlag === true || adminFlag === 'true') return true
+
+  // メールアドレスベースの管理者チェック（サーバー側と同様のロジック）
+  const adminEmailEnv =
+    process.env.NEXT_PUBLIC_SUPABASE_ADMIN_EMAILS ||
+    process.env.NEXT_PUBLIC_ADMIN_EMAILS
+  const DEFAULT_ADMIN_EMAILS = ['gakusei.union226@gmail.com']
+  const ADMIN_EMAILS = adminEmailEnv
+    ? [...DEFAULT_ADMIN_EMAILS, ...adminEmailEnv.split(',').map((email) => email.trim().toLowerCase())].filter(Boolean)
+    : DEFAULT_ADMIN_EMAILS
+
+  const email = user.email?.toLowerCase()
+  if (email && ADMIN_EMAILS.includes(email)) return true
 
   return false
 }
@@ -468,8 +480,26 @@ export default function AdminPage() {
                   <TableBody>
                     {projects.map((project) => (
                       <TableRow key={project.id} className="border-white/5">
-                        <TableCell className="max-w-xs truncate font-medium text-white">
-                          {project.title}
+                        <TableCell className="max-w-xs font-medium text-white">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/projects/${project.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-indigo-300 transition truncate"
+                            >
+                              {project.title}
+                            </Link>
+                            <Link
+                              href={`/projects/${project.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-shrink-0 text-slate-400 hover:text-indigo-300 transition"
+                              title="詳細を確認"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Link>
+                          </div>
                         </TableCell>
                         <TableCell className="text-slate-300">{project.budget || '-'}</TableCell>
                         <TableCell className="text-slate-300">
@@ -481,6 +511,20 @@ export default function AdminPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                              href={`/projects/${project.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 rounded-lg border-indigo-400/40 bg-indigo-500/20 px-3 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-500/30"
+                              >
+                                <Eye className="mr-1 h-3.5 w-3.5" />
+                                詳細
+                              </Button>
+                            </Link>
                             {project.status !== 'public' && (
                               <Button
                                 size="sm"
@@ -817,6 +861,41 @@ function EmptyPlaceholder({ text }: { text: string }) {
   )
 }
 
+function AdminHeader({
+  userEmail,
+  onSignOut,
+}: {
+  userEmail?: string | null
+  onSignOut?: () => void
+}) {
+  return (
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-black/40 backdrop-blur-xl">
+      <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 lg:px-8">
+        <div className="glass-panel flex h-16 items-center justify-between rounded-full px-4 py-2 sm:px-6">
+          <Link href="/" className="flex items-center gap-3" aria-label="UNION Match ホーム">
+            <ShieldCheck className="h-6 w-6 text-indigo-400" />
+            <span className="text-lg font-semibold text-white">UNION Match 管理画面</span>
+          </Link>
+          <div className="flex items-center gap-3">
+            {userEmail && <span className="text-xs text-slate-400">管理者: {userEmail}</span>}
+            {onSignOut && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSignOut}
+                className="border-white/30 text-white hover:bg-white/10"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                サインアウト
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  )
+}
+
 function PageShell({
   children,
   onSignOut,
@@ -829,7 +908,8 @@ function PageShell({
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#030712] via-[#050c1f] to-[#000308] text-slate-100">
       <BackgroundAura />
-      <SiteHeader />
+      {/* 管理画面では専用ヘッダーを使用して、二重ログイン状態を防ぐ */}
+      <AdminHeader userEmail={userEmail} onSignOut={onSignOut} />
       <main className="relative z-10 mx-auto max-w-6xl px-4 pb-24 pt-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-100">
@@ -842,26 +922,10 @@ function PageShell({
           <p className="mt-4 text-lg leading-relaxed text-slate-300">
             投稿案件の審査や応募状況をここで一元管理できます。ステータス更新は即時反映され、学生団体への案内も自動化されます。
           </p>
-          {(onSignOut || userEmail) && (
-            <div className="mt-6 flex flex-col items-center justify-center gap-3 text-sm text-slate-300 sm:flex-row sm:justify-end">
-              {userEmail && <span className="text-xs text-slate-400">サインイン中: {userEmail}</span>}
-              {onSignOut && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onSignOut}
-                  className="border-white/30 text-white hover:bg-white/10"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  サインアウト
-                </Button>
-              )}
-            </div>
-          )}
         </div>
         <div className="mt-12 space-y-8">{children}</div>
       </main>
-      <SiteFooter />
+      {/* 管理画面ではフッターも非表示 */}
     </div>
   )
 }

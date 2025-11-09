@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,9 +8,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Building2, Send, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
+import {
+  getCompanySession,
+  getStoredUserType,
+  hasSupabaseConfig,
+  subscribeAuthChange,
+  type AuthUserType,
+  type CompanySession,
+} from '@/lib/auth/session'
 
 export default function PostPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -21,15 +30,35 @@ export default function PostPage() {
     deadline: '',
     description: '',
     contact_info: '',
+    target_type: 'organization' as 'student' | 'organization' | 'both',
   })
-  const [companyId, setCompanyId] = useState<string | null>(null)
+  const [companySession, setCompanySession] = useState<CompanySession>(() => getCompanySession())
+  const [userType, setUserType] = useState<AuthUserType>(() => getStoredUserType())
+
+  const isUsingMockData = useMemo(() => !hasSupabaseConfig, [])
 
   useEffect(() => {
-    const cid = typeof window !== 'undefined' ? localStorage.getItem('company_id') : null
-    setCompanyId(cid)
+    const unsubscribe = subscribeAuthChange(() => {
+      setCompanySession(getCompanySession())
+      setUserType(getStoredUserType())
+    })
+    return unsubscribe
   }, [])
 
-  const isUsingMockData = !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  useEffect(() => {
+    if (isUsingMockData) return
+    if (!companySession.profile?.contact_email) return
+    setFormData((prev) => {
+      if (prev.contact_info) return prev
+      return {
+        ...prev,
+        contact_info: companySession.profile?.contact_email ?? '',
+      }
+    })
+  }, [companySession.profile?.contact_email, isUsingMockData])
+
+  const isAuthorized =
+    userType === 'company' && Boolean(companySession.accessToken && companySession.profile?.id)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,17 +69,24 @@ export default function PostPage() {
       if (isUsingMockData) {
         await new Promise(resolve => setTimeout(resolve, 1000))
         setMessage({ type: 'success', text: '案件を投稿しました（デモモード）。実際の環境では運営による承認後に公開されます。' })
-        setFormData({ title: '', budget: '', deadline: '', description: '', contact_info: '' })
+        setFormData({ title: '', budget: '', deadline: '', description: '', contact_info: '', target_type: 'organization' })
       } else {
+        if (!companySession.accessToken || !companySession.profile?.id) {
+          throw new Error('企業アカウントで再度ログインしてください。')
+        }
+
         const response = await fetch('/api/projects', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...formData, company_id: companyId }),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${companySession.accessToken}`,
+          },
+          body: JSON.stringify(formData),
         })
 
         if (response.ok) {
           setMessage({ type: 'success', text: '案件を投稿しました。運営による承認後に公開されます。' })
-          setFormData({ title: '', budget: '', deadline: '', description: '', contact_info: '' })
+          setFormData({ title: '', budget: '', deadline: '', description: '', contact_info: '', target_type: 'organization' })
         } else {
           const j = await response.json().catch(() => ({}))
           throw new Error(j?.error || '投稿に失敗しました')
@@ -68,9 +104,11 @@ export default function PostPage() {
   }
 
   const isFormValid = formData.title && formData.description && formData.contact_info
+  const canSubmit = Boolean(isFormValid && (isUsingMockData || isAuthorized))
+  const showAuthWarning = !isUsingMockData && !isAuthorized
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen text-white motion-fade-in" style={{ background: 'var(--bg-0-fallback)' }}>
       <SiteHeader />
 
       <div className="max-w-3xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -83,13 +121,13 @@ export default function PostPage() {
               案件<span className="union-text-gradient">投稿</span>
             </h1>
           </div>
-          <p className="text-xl text-gray-400">
-            学生団体との協業案件を投稿してください。投稿後、運営による承認を経て公開されます。
+          <p className="text-xl" style={{ color: 'var(--ink-muted-fallback)' }}>
+            学生団体との協業案件を投稿してください。投稿後、運営による承認後に公開されます。
           </p>
         </div>
 
         {/* 企業登録未完の注意 */}
-        {!isUsingMockData && !companyId && (
+        {showAuthWarning && (
           <Card className="union-card border-yellow-500/30 bg-yellow-500/10 mb-8">
             <CardContent className="py-4">
               <div className="flex items-center">
@@ -97,13 +135,25 @@ export default function PostPage() {
                 <div>
                   <p className="text-yellow-300 font-medium">企業登録が必要です</p>
                   <p className="text-yellow-400/80 text-sm">
-                    先に企業登録を行ってください。登録後は自動的にこのページで企業情報が紐づきます。
+                    企業アカウントでログイン後に案件投稿が可能になります。まだ企業登録を済ませていない場合は、先に企業登録を完了してください。
                   </p>
                   <Button asChild variant="outline" className="mt-3 border-white/30 text-white hover:bg-white/10">
-                    <Link href="/company">企業登録へ</Link>
+                    <Link href="/login/company?redirect=/post">企業ログインへ</Link>
                   </Button>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isUsingMockData && isAuthorized && (
+          <Card className="union-card border-emerald-500/20 bg-emerald-500/10 mb-8">
+            <CardContent className="py-4">
+              <p className="text-sm text-emerald-100">
+                {companySession.profile?.name
+                  ? `${companySession.profile.name} としてログイン中です。`
+                  : '企業アカウントでログイン中です。'}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -123,25 +173,59 @@ export default function PostPage() {
           </Alert>
         )}
 
-        <Card className="union-card border-white/10">
+        <Card className="glass-panel border-0 rounded-um-lg">
           <CardHeader>
             <CardTitle className="text-2xl text-white">案件詳細</CardTitle>
-            <CardDescription className="text-gray-400">学生団体が興味を持てるよう、詳細な情報を記載してください</CardDescription>
+            <CardDescription style={{ color: 'var(--ink-muted-fallback)' }}>学生個人・学生団体が興味を持てるよう、詳細な情報を記載してください</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-8">
               <div className="space-y-3">
+                <Label className="text-white text-base">募集対象 *</Label>
+                <RadioGroup
+                  value={formData.target_type}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, target_type: value as 'student' | 'organization' | 'both' }))}
+                  className="space-y-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="organization" id="target-organization" />
+                    <Label htmlFor="target-organization" className="text-white cursor-pointer">
+                      学生団体のみ
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="student" id="target-student" />
+                    <Label htmlFor="target-student" className="text-white cursor-pointer">
+                      学生個人のみ
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="both" id="target-both" />
+                    <Label htmlFor="target-both" className="text-white cursor-pointer">
+                      学生団体・学生個人の両方
+                    </Label>
+                  </div>
+                </RadioGroup>
+                <p className="text-sm" style={{ color: 'var(--ink-muted-fallback)' }}>選択した対象に応じて、適切な案件一覧に表示されます</p>
+              </div>
+              <div className="space-y-3">
                 <Label htmlFor="title" className="text-white text-base">案件名 *</Label>
                 <Input id="title" name="title" value={formData.title} onChange={handleChange} required
                   placeholder="例：学生向けイベント企画・運営パートナー募集"
-                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-500 focus:border-white/40 h-12"
+                  className="bg-white/5 border-white/20 text-white focus:border-white/40 h-12 rounded-um-md"
+                  style={{ 
+                    '--tw-placeholder-opacity': '0.5',
+                  } as React.CSSProperties}
                 />
               </div>
               <div className="space-y-3">
                 <Label htmlFor="budget" className="text-white text-base">予算・報酬</Label>
                 <Input id="budget" name="budget" value={formData.budget} onChange={handleChange}
                   placeholder="例：10万円〜20万円、応相談"
-                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-500 focus:border-white/40 h-12"
+                  className="bg-white/5 border-white/20 text-white focus:border-white/40 h-12 rounded-um-md"
+                  style={{ 
+                    '--tw-placeholder-opacity': '0.5',
+                  } as React.CSSProperties}
                 />
               </div>
               <div className="space-y-3">
@@ -154,20 +238,30 @@ export default function PostPage() {
                 <Label htmlFor="description" className="text-white text-base">案件詳細 *</Label>
                 <Textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={10} required
                   placeholder="案件の詳細、求めるスキル、期待する成果物などを記載してください"
-                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-500 focus:border-white/40"
+                  className="bg-white/5 border-white/20 text-white focus:border-white/40 rounded-um-md"
+                  style={{ 
+                    '--tw-placeholder-opacity': '0.5',
+                  } as React.CSSProperties}
                 />
-                <p className="text-sm text-gray-500">Markdown記法が使用できます</p>
+                <p className="text-sm" style={{ color: 'var(--ink-muted-fallback)' }}>Markdown記法が使用できます</p>
               </div>
               <div className="space-y-3">
                 <Label htmlFor="contact_info" className="text-white text-base">連絡先 *</Label>
                 <Input id="contact_info" name="contact_info" type="email" value={formData.contact_info} onChange={handleChange} required
                   placeholder="example@company.com"
-                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-500 focus:border-white/40 h-12"
+                  className="bg-white/5 border-white/20 text-white focus:border-white/40 h-12 rounded-um-md"
+                  style={{ 
+                    '--tw-placeholder-opacity': '0.5',
+                  } as React.CSSProperties}
                 />
-                <p className="text-sm text-gray-500">この情報は公開されません。応募があった際の連絡に使用します。</p>
+                <p className="text-sm" style={{ color: 'var(--ink-muted-fallback)' }}>この情報は公開されません。応募があった際の連絡に使用します。</p>
               </div>
 
-              <Button type="submit" className="w-full union-gradient text-white border-0 py-4 text-lg hover:opacity-90" disabled={!isFormValid || isSubmitting}>
+              <Button
+                type="submit"
+                className="w-full union-gradient text-white border-0 py-4 text-lg hover:opacity-90"
+                disabled={!canSubmit || isSubmitting}
+              >
                 {isSubmitting ? '投稿中...' : (<><Send className="h-5 w-5 mr-2" />案件を投稿する</>)}
               </Button>
             </form>
@@ -175,7 +269,7 @@ export default function PostPage() {
         </Card>
 
         <div className="mt-12 text-center">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm" style={{ color: 'var(--ink-muted-fallback)' }}>
             投稿された案件は運営による承認後に公開されます。
             <br />通常1-2営業日以内に承認いたします。
           </p>

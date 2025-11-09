@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, LogIn, Sparkles, AlertCircle } from 'lucide-react'
@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
+import { hasSupabaseConfig, persistOrganizationSession } from '@/lib/auth/session'
 
 export default function OrganizationLoginPage() {
   const supabase = useMemo(() => {
@@ -24,15 +25,12 @@ export default function OrganizationLoginPage() {
   }, [])
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams?.get('redirect') || '/projects'
+  const redirect = searchParams?.get('redirect') || '/dashboard/organization'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const hasSupabaseConfig =
-    Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) && Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +55,7 @@ export default function OrganizationLoginPage() {
       if (data.user) {
         const { data: orgData } = await supabase
           .from('organizations')
-          .select('id')
+          .select('id, name, contact_email, contact_phone')
           .eq('user_id', data.user.id)
           .single()
 
@@ -65,6 +63,17 @@ export default function OrganizationLoginPage() {
           await supabase.auth.signOut()
           throw new Error('このアカウントは団体アカウントではありません')
         }
+
+        persistOrganizationSession({
+          accessToken: data.session?.access_token ?? null,
+          refreshToken: data.session?.refresh_token ?? null,
+          profile: {
+            id: orgData.id,
+            name: orgData.name ?? null,
+            contact_email: orgData.contact_email ?? null,
+            contact_phone: orgData.contact_phone ?? null,
+          },
+        })
       }
 
       router.replace(redirect)
@@ -91,28 +100,34 @@ export default function OrganizationLoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#030712] via-[#050c1f] to-[#000308] text-slate-100">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.18),_transparent_60%)]" />
+    <div className="relative min-h-screen overflow-hidden text-white motion-fade-in" style={{ background: 'var(--bg-0-fallback)' }}>
+      <div 
+        className="pointer-events-none absolute inset-0 opacity-10"
+        style={{
+          background: 'radial-gradient(circle at 50% 20%, var(--um-blue-fallback) 0%, transparent 60%)',
+        }}
+      />
       <SiteHeader />
       <main className="relative z-10 mx-auto max-w-lg px-4 pb-24 pt-16 sm:px-6 lg:px-8">
         <div className="mb-8">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"
+            className="inline-flex items-center gap-2 text-sm transition hover:text-white"
+            style={{ color: 'var(--ink-muted-fallback)' }}
           >
             <ArrowLeft className="h-4 w-4" />
             トップに戻る
           </Link>
         </div>
 
-        <Card className="glass-panel border-white/10 bg-black/25">
+        <Card className="glass-panel border-0 rounded-um-lg">
           <CardHeader className="space-y-4 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-indigo-100">
               <Sparkles className="h-4 w-4" />
               Organization Login
             </div>
             <CardTitle className="text-3xl text-white">学生団体ログイン</CardTitle>
-            <CardDescription className="text-slate-300">
+            <CardDescription style={{ color: 'var(--ink-muted-fallback)' }}>
               登録済みのメールアドレスとパスワードを入力してください
             </CardDescription>
           </CardHeader>
@@ -126,7 +141,7 @@ export default function OrganizationLoginPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-300">
+                <Label htmlFor="email" style={{ color: 'var(--ink-muted-fallback)' }}>
                   メールアドレス
                 </Label>
                 <Input
@@ -137,7 +152,10 @@ export default function OrganizationLoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
-                  className="h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-slate-500"
+                  className="h-11 rounded-um-md border-white/10 bg-white/5 text-white"
+                  style={{ 
+                    '--tw-placeholder-opacity': '0.5',
+                  } as React.CSSProperties}
                   placeholder="example@email.com"
                 />
               </div>
@@ -154,7 +172,10 @@ export default function OrganizationLoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="h-11 rounded-xl border-white/10 bg-white/5 text-white placeholder:text-slate-500"
+                  className="h-11 rounded-um-md border-white/10 bg-white/5 text-white"
+                  style={{ 
+                    '--tw-placeholder-opacity': '0.5',
+                  } as React.CSSProperties}
                 />
               </div>
 
@@ -177,13 +198,21 @@ export default function OrganizationLoginPage() {
               </Button>
 
               <div className="text-center space-y-2">
-                <p className="text-xs text-slate-400">
+                <p className="text-xs" style={{ color: 'var(--ink-muted-fallback)' }}>
+                  <Link
+                    href="/reset-password?type=organization"
+                    className="text-indigo-300 hover:text-indigo-200"
+                  >
+                    パスワードを忘れた場合
+                  </Link>
+                </p>
+                <p className="text-xs" style={{ color: 'var(--ink-muted-fallback)' }}>
                   アカウントをお持ちでないですか？{' '}
                   <Link href="/register/organization" className="text-indigo-300 hover:text-indigo-200">
                     新規登録
                   </Link>
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs" style={{ color: 'var(--ink-muted-fallback)' }}>
                   企業としてログインする場合は{' '}
                   <Link href="/login/company" className="text-indigo-300 hover:text-indigo-200">
                     こちら

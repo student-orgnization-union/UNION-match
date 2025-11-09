@@ -1,0 +1,1061 @@
+'use client'
+
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  User,
+  FileText,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  Send,
+  Star,
+  Copy,
+  Building2,
+  ExternalLink,
+  Edit,
+  Save,
+  Mail,
+  Phone,
+  GraduationCap,
+  Calendar,
+  DollarSign,
+  Link as LinkIcon,
+  MessageSquare,
+} from 'lucide-react'
+
+import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
+import {
+  getStudentSession,
+  getStoredUserType,
+  hasSupabaseConfig,
+  subscribeAuthChange,
+  type AuthUserType,
+  type StudentSession,
+} from '@/lib/auth/session'
+
+type Application = {
+  id: string
+  project_id: string
+  project_title: string
+  project_description?: string | null
+  project_budget?: string | null
+  project_deadline?: string | null
+  appeal: string
+  created_at: string
+  accepted_at?: string | null
+  status?: string
+  has_rating?: boolean // 評価済みかどうか
+  project_contact_info?: string | null // 企業の連絡先情報
+  company_name?: string | null // 企業名
+  company_id?: string | null // 企業ID
+}
+
+export default function StudentDashboardPage() {
+  const router = useRouter()
+  const supabase = useMemo(() => {
+    try {
+      return createClient()
+    } catch {
+      return null
+    }
+  }, [])
+  const [studentSession, setStudentSession] = useState<StudentSession>(() => getStudentSession())
+  const [userType, setUserType] = useState<AuthUserType>(() => getStoredUserType())
+  const [applications, setApplications] = useState<Application[]>([])
+  const [recommendedProjects, setRecommendedProjects] = useState<any[]>([])
+  const [studentInfo, setStudentInfo] = useState<{
+    id: string
+    name: string
+    email: string | null
+    university: string | null
+    department: string | null
+    grade: string | null
+    contact_email: string | null
+    contact_phone: string | null
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isEditingStudent, setIsEditingStudent] = useState(false)
+  const [editingStudent, setEditingStudent] = useState<{
+    name?: string
+    email?: string | null
+    university?: string | null
+    department?: string | null
+    grade?: string | null
+    contact_email?: string | null
+    contact_phone?: string | null
+  }>({})
+  const [savingStudent, setSavingStudent] = useState(false)
+
+  const isUsingMockData = useMemo(() => !hasSupabaseConfig, [])
+  const isAuthorized =
+    userType === 'student' &&
+    Boolean(studentSession.accessToken && studentSession.profile?.id)
+
+  useEffect(() => {
+    const unsubscribe = subscribeAuthChange(() => {
+      setStudentSession(getStudentSession())
+      setUserType(getStoredUserType())
+    })
+    return unsubscribe
+  }, [])
+
+  useEffect(() => {
+    if (!isAuthorized || isUsingMockData) {
+      setLoading(false)
+      return
+    }
+
+    const fetchData = async () => {
+      if (!supabase || !studentSession.profile?.id) return
+
+      try {
+        // 学生情報を取得
+        const { data: studentData, error: studentError } = await supabase
+          .from('students')
+          .select('id, name, email, university, department, grade, contact_email, contact_phone')
+          .eq('id', studentSession.profile.id)
+          .single()
+
+        if (studentError) throw studentError
+        if (studentData) {
+          setStudentInfo(studentData)
+        }
+
+        // 応募情報を取得
+        const { data, error: fetchError } = await supabase
+          .from('applications')
+          .select(
+            'id, project_id, appeal, created_at, accepted_at, status, projects(id, title, description, budget, deadline, contact_info, company_id, companies(id, name))',
+          )
+          .eq('student_id', studentSession.profile.id)
+          .order('created_at', { ascending: false })
+
+        if (fetchError) throw fetchError
+
+        // 各応募に対して評価済みかどうか、企業名を取得
+        const applicationsWithRatings = await Promise.all(
+          (data || []).map(async (app: any) => {
+            let hasRating = false
+            if (studentSession.profile?.id) {
+              const { data: ratingData } = await supabase
+                .from('ratings')
+                .select('id')
+                .eq('application_id', app.id)
+                .eq('rater_type', 'student')
+                .eq('rater_id', studentSession.profile.id)
+                .single()
+              
+              hasRating = !!ratingData
+            }
+
+                const project = app.projects && !Array.isArray(app.projects) ? app.projects : null
+                const company = project?.companies && !Array.isArray(project.companies) ? project.companies : null
+
+                return {
+                  id: app.id,
+                  project_id: app.project_id,
+                  project_title: project?.title || '不明な案件',
+                  project_description: project?.description || null,
+                  project_budget: project?.budget || null,
+                  project_deadline: project?.deadline || null,
+                  appeal: app.appeal,
+                  created_at: app.created_at,
+                  accepted_at: app.accepted_at,
+                  status: app.status || 'pending',
+                  has_rating: hasRating,
+                  project_contact_info: project?.contact_info || null,
+                  company_name: company?.name || null,
+                  company_id: project?.company_id || null,
+                }
+          })
+        )
+
+        setApplications(applicationsWithRatings)
+      } catch (err: any) {
+        console.error('Failed to fetch data:', err)
+        setError('データの取得に失敗しました')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [isAuthorized, isUsingMockData, supabase, studentSession.profile?.id])
+
+  // レコメンド案件の取得
+  useEffect(() => {
+    if (!isAuthorized || isUsingMockData) return
+
+    const fetchRecommendations = async () => {
+      if (!studentSession.accessToken) return
+
+      setLoadingRecommendations(true)
+      try {
+        const response = await fetch('/api/recommendations?target_type=student&limit=5', {
+          headers: {
+            Authorization: `Bearer ${studentSession.accessToken}`,
+          },
+        })
+
+        if (response.ok) {
+          const { data } = await response.json()
+          setRecommendedProjects(data || [])
+        }
+      } catch (err) {
+        console.error('Failed to fetch recommendations:', err)
+      } finally {
+        setLoadingRecommendations(false)
+      }
+    }
+
+    fetchRecommendations()
+  }, [isAuthorized, isUsingMockData, studentSession.accessToken])
+
+  // 未認証の場合はリダイレクト
+  useEffect(() => {
+    if (!loading && !isAuthorized && !isUsingMockData) {
+      router.push('/login/student?redirect=/dashboard/student')
+    }
+  }, [loading, isAuthorized, isUsingMockData, router])
+
+  if (!hasSupabaseConfig) {
+    return (
+      <div className="min-h-screen text-white" style={{ background: 'var(--bg-0-fallback)' }}>
+        <SiteHeader />
+        <div className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
+          <Alert className="border-yellow-400/40 bg-yellow-500/10 text-yellow-100">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>Supabase の設定が必要です</AlertDescription>
+          </Alert>
+        </div>
+        <SiteFooter />
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen text-white" style={{ background: 'var(--bg-0-fallback)' }}>
+        <SiteHeader />
+        <div className="mx-auto max-w-6xl px-4 py-16 text-center">
+          <p style={{ color: 'var(--ink-muted-fallback)' }}>読み込み中...</p>
+        </div>
+        <SiteFooter />
+      </div>
+    )
+  }
+
+  if (!isAuthorized && !isUsingMockData) {
+    return null // リダイレクト中
+  }
+
+  const statusCounts = {
+    pending: applications.filter((app) => app.status === 'pending').length,
+    accepted: applications.filter((app) => app.status === 'accepted').length,
+    rejected: applications.filter((app) => app.status === 'rejected').length,
+    completed: applications.filter((app) => app.status === 'completed').length,
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'accepted':
+        return (
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-500/10 border border-green-400/40 text-green-100">
+            承認済み
+          </span>
+        )
+      case 'rejected':
+        return (
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 border border-rose-400/40 text-rose-100">
+            不承認
+          </span>
+        )
+      case 'completed':
+        return (
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 border border-indigo-400/40 text-indigo-100">
+            完了
+          </span>
+        )
+      default:
+        return (
+          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500/10 border border-yellow-400/40 text-yellow-100">
+            審査中
+          </span>
+        )
+    }
+  }
+
+  return (
+    <div className="relative min-h-screen overflow-hidden text-white motion-fade-in" style={{ background: 'var(--bg-0-fallback)' }}>
+      <div 
+        className="pointer-events-none absolute inset-0 opacity-10"
+        style={{
+          background: 'radial-gradient(circle at 50% 20%, var(--um-blue-fallback) 0%, transparent 60%)',
+        }}
+      />
+      <SiteHeader />
+      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-24 pt-16 sm:px-6 lg:px-8">
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 union-gradient rounded-2xl flex items-center justify-center">
+                <User className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-bold text-white">
+                  学生個人<span className="union-text-gradient">ダッシュボード</span>
+                </h1>
+                <p className="text-lg mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>
+                  {studentSession.profile?.name || '学生アカウント'}としてログイン中
+                </p>
+              </div>
+            </div>
+            <Button
+              asChild
+              className="union-gradient union-glow h-11 px-6 text-sm font-semibold"
+            >
+              <Link href="/projects/students">
+                <ArrowRight className="mr-2 h-4 w-4" />
+                案件を探す
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {error && (
+          <Alert className="mb-8 border-rose-400/40 bg-rose-500/10 text-rose-100">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* 学生個人詳細のプレビュー・編集 */}
+        {studentInfo && (
+          <div className="mb-12">
+            <Card className="glass-panel border-0 rounded-um-lg">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-2xl text-white">学生個人詳細情報</CardTitle>
+                  <div className="flex items-center gap-2">
+                    {!isEditingStudent && (
+                      <>
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          <Link href={`/students/${studentInfo.id}`} target="_blank">
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            プレビュー
+                          </Link>
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setIsEditingStudent(true)
+                            setEditingStudent({
+                              name: studentInfo.name,
+                              email: studentInfo.email || '',
+                              university: studentInfo.university || '',
+                              department: studentInfo.department || '',
+                              grade: studentInfo.grade || '',
+                              contact_email: studentInfo.contact_email || '',
+                              contact_phone: studentInfo.contact_phone || '',
+                            })
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          編集
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <CardDescription style={{ color: 'var(--ink-muted-fallback)' }}>
+                  企業側から見た学生個人詳細画面のプレビューと編集ができます
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isEditingStudent ? (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="student-name" style={{ color: 'var(--ink-muted-fallback)' }}>
+                        氏名 <span className="text-rose-300">*</span>
+                      </Label>
+                      <Input
+                        id="student-name"
+                        value={editingStudent.name || ''}
+                        onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                        className="bg-white/5 border-white/10 text-white rounded-um-md"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="student-email" style={{ color: 'var(--ink-muted-fallback)' }}>
+                        メールアドレス
+                      </Label>
+                      <Input
+                        id="student-email"
+                        type="email"
+                        value={editingStudent.email || ''}
+                        onChange={(e) => setEditingStudent({ ...editingStudent, email: e.target.value })}
+                        className="bg-white/5 border-white/10 text-white rounded-um-md"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="student-university" style={{ color: 'var(--ink-muted-fallback)' }}>
+                          大学
+                        </Label>
+                        <Input
+                          id="student-university"
+                          value={editingStudent.university || ''}
+                          onChange={(e) => setEditingStudent({ ...editingStudent, university: e.target.value })}
+                          className="bg-white/5 border-white/10 text-white rounded-um-md"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="student-department" style={{ color: 'var(--ink-muted-fallback)' }}>
+                          学部・学科
+                        </Label>
+                        <Input
+                          id="student-department"
+                          value={editingStudent.department || ''}
+                          onChange={(e) => setEditingStudent({ ...editingStudent, department: e.target.value })}
+                          className="bg-white/5 border-white/10 text-white rounded-um-md"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="student-grade" style={{ color: 'var(--ink-muted-fallback)' }}>
+                        学年
+                      </Label>
+                      <Input
+                        id="student-grade"
+                        value={editingStudent.grade || ''}
+                        onChange={(e) => setEditingStudent({ ...editingStudent, grade: e.target.value })}
+                        className="bg-white/5 border-white/10 text-white rounded-um-md"
+                        placeholder="例: 3年生"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="student-contact-email" style={{ color: 'var(--ink-muted-fallback)' }}>
+                        連絡先メールアドレス <span className="text-rose-300">*</span>
+                      </Label>
+                      <Input
+                        id="student-contact-email"
+                        type="email"
+                        value={editingStudent.contact_email || ''}
+                        onChange={(e) => setEditingStudent({ ...editingStudent, contact_email: e.target.value })}
+                        className="bg-white/5 border-white/10 text-white rounded-um-md"
+                        placeholder="contact@example.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="student-contact-phone" style={{ color: 'var(--ink-muted-fallback)' }}>
+                        連絡先電話番号
+                      </Label>
+                      <Input
+                        id="student-contact-phone"
+                        type="tel"
+                        value={editingStudent.contact_phone || ''}
+                        onChange={(e) => setEditingStudent({ ...editingStudent, contact_phone: e.target.value })}
+                        className="bg-white/5 border-white/10 text-white rounded-um-md"
+                        placeholder="090-1234-5678"
+                      />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        onClick={async () => {
+                          if (!supabase || !studentInfo.id || !editingStudent.name || !editingStudent.contact_email) return
+                          setSavingStudent(true)
+                          try {
+                            const { error: updateError } = await supabase
+                              .from('students')
+                              .update({
+                                name: editingStudent.name,
+                                email: editingStudent.email || null,
+                                university: editingStudent.university || null,
+                                department: editingStudent.department || null,
+                                grade: editingStudent.grade || null,
+                                contact_email: editingStudent.contact_email,
+                                contact_phone: editingStudent.contact_phone || null,
+                              })
+                              .eq('id', studentInfo.id)
+
+                            if (updateError) throw updateError
+
+                            setStudentInfo({ ...studentInfo, ...editingStudent })
+                            setIsEditingStudent(false)
+                            setError(null)
+                          } catch (err: any) {
+                            console.error('Failed to update student:', err)
+                            setError('学生情報の更新に失敗しました')
+                          } finally {
+                            setSavingStudent(false)
+                          }
+                        }}
+                        disabled={savingStudent || !editingStudent.name || !editingStudent.contact_email}
+                        className="union-gradient union-glow h-10 px-6 text-sm font-semibold"
+                      >
+                        <Save className="mr-2 h-4 w-4" />
+                        {savingStudent ? '保存中...' : '保存'}
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setIsEditingStudent(false)
+                          setEditingStudent({})
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      >
+                        キャンセル
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="flex items-start gap-6">
+                      <div className="w-24 h-24 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center flex-shrink-0">
+                        <User className="h-12 w-12" style={{ color: 'var(--ink-muted-fallback)' }} />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-bold text-white mb-2">{studentInfo.name}</h3>
+                        {studentInfo.contact_email && (
+                          <div className="flex items-center gap-2 text-sm mb-1" style={{ color: 'var(--ink-muted-fallback)' }}>
+                            <Mail className="h-4 w-4" />
+                            {studentInfo.contact_email}
+                          </div>
+                        )}
+                        {studentInfo.contact_phone && (
+                          <div className="flex items-center gap-2 text-sm mb-1" style={{ color: 'var(--ink-muted-fallback)' }}>
+                            <Phone className="h-4 w-4" />
+                            {studentInfo.contact_phone}
+                          </div>
+                        )}
+                        {(studentInfo.university || studentInfo.department || studentInfo.grade) && (
+                          <div className="flex items-center gap-2 text-sm mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>
+                            <GraduationCap className="h-4 w-4" />
+                            {[studentInfo.university, studentInfo.department, studentInfo.grade].filter(Boolean).join(' / ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          <Card className="glass-panel border-0 rounded-um-lg">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">応募済み案件</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-white">{applications.length}</div>
+              <p className="text-sm mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>件</p>
+            </CardContent>
+          </Card>
+          <Card className="glass-panel border-0 rounded-um-lg">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">審査中</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-yellow-400">{statusCounts.pending}</div>
+              <p className="text-sm mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>件</p>
+            </CardContent>
+          </Card>
+          <Card className="glass-panel border-0 rounded-um-lg">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">承認済み</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-400">{statusCounts.accepted}</div>
+              <p className="text-sm mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>件</p>
+            </CardContent>
+          </Card>
+          <Card className="glass-panel border-0 rounded-um-lg">
+            <CardHeader>
+              <CardTitle className="text-lg text-white">完了</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-indigo-400">{statusCounts.completed}</div>
+              <p className="text-sm mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>件</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* おすすめ案件 */}
+        {recommendedProjects.length > 0 && (
+          <div className="mb-12 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">おすすめ案件</h2>
+                <p className="text-sm mt-1" style={{ color: 'var(--ink-muted-fallback)' }}>
+                  高評価の企業からの案件を推薦しています
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {recommendedProjects.map((project: any) => {
+                const company = project.company && !Array.isArray(project.company) ? project.company : null
+                return (
+                  <Card key={project.id} className="glass-panel border-0 rounded-um-lg hover:border-indigo-400/40 transition">
+                    <CardHeader>
+                      <div className="flex items-start justify-between mb-2">
+                        <CardTitle className="text-lg text-white line-clamp-2">{project.title}</CardTitle>
+                        {company?.rating_avg && (
+                          <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                            <span className="text-xs text-yellow-400 font-semibold">
+                              {company.rating_avg.toFixed(1)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {company && (
+                        <CardDescription style={{ color: 'var(--ink-muted-fallback)' }}>
+                          {company.name}
+                        </CardDescription>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm mb-4 line-clamp-3" style={{ color: 'var(--ink-muted-fallback)' }}>{project.description}</p>
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-white/20 bg-white/5 text-white hover:bg-white/10"
+                      >
+                        <Link href={`/projects/${project.id}`}>
+                          詳細を見る
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* マッチング成立 */}
+        {applications.filter((app) => app.status === 'accepted').length > 0 && (
+          <div className="mb-12 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">マッチング成立</h2>
+                <p className="text-sm mt-1" style={{ color: 'var(--ink-muted-fallback)' }}>
+                  承認された応募一覧です。企業の連絡先情報を確認して、プロジェクトを進めてください。
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4">
+              {applications
+                .filter((app) => app.status === 'accepted')
+                .map((application) => (
+                  <Card key={application.id} className="glass-panel border-0 rounded-um-lg border-green-400/20">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <h3 className="text-xl font-semibold text-white">{application.project_title}</h3>
+                            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-500/10 border border-green-400/40 text-green-400">
+                              マッチング成立
+                            </span>
+                          </div>
+                          
+                          {/* マッチング成立メッセージ */}
+                          <div className="mb-4 p-4 rounded-lg bg-indigo-500/10 border border-indigo-400/20">
+                            <p className="text-sm font-semibold text-indigo-300 mb-1">
+                              🎉 マッチング成立
+                            </p>
+                            <p className="text-sm text-white">
+                              UNION Matchにて案件の承諾いただいた
+                              {application.company_name ? (
+                                <span className="font-semibold text-indigo-200">
+                                  {application.company_name}
+                                </span>
+                              ) : (
+                                <span className="font-semibold text-indigo-200">企業</span>
+                              )}
+                              とのマッチングが成立しました。
+                            </p>
+                            {application.accepted_at && (
+                              <p className="text-xs mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>
+                                成立日: {new Date(application.accepted_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+                              </p>
+                            )}
+                          </div>
+
+                          {application.company_name && application.company_id && (
+                            <p className="text-sm mb-2" style={{ color: 'var(--ink-muted-fallback)' }}>
+                              企業:{' '}
+                              <Link
+                                href={`/companies/${application.company_id}`}
+                                target="_blank"
+                                className="font-semibold text-white hover:text-indigo-400 transition underline inline-flex items-center gap-1"
+                              >
+                                {application.company_name}
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            </p>
+                          )}
+
+                          {/* 案件情報サマリー */}
+                          <div className="mt-4 p-4 rounded-lg bg-indigo-500/10 border border-indigo-400/20">
+                            <p className="text-sm font-semibold text-indigo-300 mb-3 flex items-center gap-2">
+                              <FileText className="h-4 w-4" />
+                              案件情報
+                            </p>
+                            <div className="space-y-2 text-sm">
+                              {application.project_description && (
+                                <p className="text-white line-clamp-2" style={{ color: 'var(--ink-muted-fallback)' }}>
+                                  {application.project_description}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap gap-4 mt-3">
+                                {application.project_budget && (
+                                  <div className="flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4" style={{ color: 'var(--ink-muted-fallback)' }} />
+                                    <span style={{ color: 'var(--ink-muted-fallback)' }}>予算: {application.project_budget}</span>
+                                  </div>
+                                )}
+                                {application.project_deadline && (
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4" style={{ color: 'var(--ink-muted-fallback)' }} />
+                                    <span style={{ color: 'var(--ink-muted-fallback)' }}>
+                                      期限: {new Date(application.project_deadline).toLocaleDateString('ja-JP')}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-indigo-400/20">
+                              <Button
+                                asChild
+                                variant="outline"
+                                size="sm"
+                                className="w-full border-indigo-400/40 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/20"
+                              >
+                                <Link href={`/projects/${application.project_id}`}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  案件詳細ページを開く
+                                </Link>
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          {/* アクションエリア */}
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {application.project_contact_info && application.project_contact_info.includes('@') && (
+                              <Button
+                                size="sm"
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                onClick={async () => {
+                                  try {
+                                    // トラッキングIDを生成
+                                    const trackingId = `track_${application.id}_${Date.now()}`
+                                    const projectUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/projects/${application.project_id}?ref=email&application_id=${application.id}&tracking_id=${trackingId}`
+                                    
+                                    // メール本文テンプレート（案件詳細を含む）
+                                    const emailBody = `こんにちは、
+
+UNION Matchにて案件「${application.project_title}」のマッチングが成立いたしました。
+
+【案件詳細】
+案件名: ${application.project_title}
+${application.project_description ? `案件説明: ${application.project_description}\n` : ''}${application.project_budget ? `予算: ${application.project_budget}\n` : ''}${application.project_deadline ? `期限: ${new Date(application.project_deadline).toLocaleDateString('ja-JP')}\n` : ''}
+
+案件詳細ページ: ${projectUrl}
+
+プロジェクトの詳細について、ご連絡させていただきます。
+
+よろしくお願いいたします。
+
+---
+このメールはUNION Match経由で送信されました。
+案件URL: ${projectUrl}`
+
+                                    const mailtoLink = `mailto:${application.project_contact_info}?subject=${encodeURIComponent(`【UNION Match】${application.project_title}について`)}&body=${encodeURIComponent(emailBody)}`
+                                    
+                                    // 連絡履歴を記録
+                                    if (studentSession.accessToken) {
+                                      try {
+                                        await fetch('/api/contact/log', {
+                                          method: 'POST',
+                                          headers: {
+                                            'Content-Type': 'application/json',
+                                            Authorization: `Bearer ${studentSession.accessToken}`,
+                                          },
+                                          body: JSON.stringify({
+                                            application_id: application.id,
+                                            recipient_type: 'company',
+                                            recipient_id: application.company_id,
+                                            contact_method: 'email',
+                                            contact_info: application.project_contact_info,
+                                            message_preview: `件名: 【UNION Match】${application.project_title}について`,
+                                            project_url: projectUrl,
+                                            tracking_id: trackingId,
+                                          }),
+                                        })
+                                      } catch (logError) {
+                                        console.error('Failed to log contact:', logError)
+                                      }
+                                    }
+                                    
+                                    // メール送信
+                                    window.location.href = mailtoLink
+                                  } catch (err) {
+                                    console.error('Failed to send email:', err)
+                                    alert('メール送信に失敗しました')
+                                  }
+                                }}
+                              >
+                                <Mail className="mr-2 h-4 w-4" />
+                                企業にメールで連絡
+                              </Button>
+                            )}
+                            <Button
+                              asChild
+                              variant="outline"
+                              size="sm"
+                              className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                            >
+                              <Link href={`/projects/${application.project_id}`}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                案件詳細を見る
+                              </Link>
+                            </Button>
+                          </div>
+
+                          {/* 企業連絡先情報 */}
+                          {application.project_contact_info && (
+                            <div className="mt-4 p-4 rounded-lg bg-green-500/10 border border-green-400/20">
+                              <div className="flex items-center justify-between mb-3">
+                                <p className="text-sm font-semibold text-green-400 flex items-center gap-2">
+                                  <MessageSquare className="h-4 w-4" />
+                                  企業連絡先情報
+                                </p>
+                              </div>
+                              <div className="space-y-3">
+                                {application.project_contact_info.includes('@') ? (
+                                  <div className="text-sm">
+                                    <p className="text-white mb-2">メールアドレスが登録されています。上記の「企業にメールで連絡」ボタンから連絡できます。</p>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2 text-sm text-white">
+                                      <Phone className="h-4 w-4" />
+                                      {application.project_contact_info}
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-xs border-green-400/40 bg-green-500/10 text-green-100 hover:bg-green-500/20"
+                                      onClick={async () => {
+                                        try {
+                                          await navigator.clipboard.writeText(application.project_contact_info || '')
+                                          alert('企業連絡先情報をコピーしました')
+                                        } catch (err) {
+                                          console.error('Failed to copy:', err)
+                                        }
+                                      }}
+                                    >
+                                      <Copy className="h-3 w-3 mr-1" />
+                                      コピー
+                                    </Button>
+                                  </div>
+                                )}
+                                <p className="text-xs mt-2" style={{ color: 'var(--ink-muted-fallback)' }}>
+                                  ※ 連絡はUNION Match経由で行ってください。案件URLを含めることで、プロジェクトの進捗を管理できます。
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* プロジェクト進行フロー（タイミー風） */}
+                          <div className="mt-4 p-4 rounded-lg bg-indigo-500/10 border border-indigo-400/20">
+                            <p className="text-sm font-semibold text-indigo-300 mb-3 flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              プロジェクト進行フロー
+                            </p>
+                            <div className="space-y-3">
+                              <div className="flex items-start gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-500/20 border-2 border-indigo-400/40 flex items-center justify-center text-sm font-bold text-indigo-300">
+                                  1
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-white mb-1">初回連絡</p>
+                                  <p className="text-xs mb-2" style={{ color: 'var(--ink-muted-fallback)' }}>
+                                    上記の「企業にメールで連絡」ボタンから、案件詳細を含むメールを送信してください
+                                  </p>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-3 text-xs border-indigo-400/40 bg-indigo-500/10 text-indigo-100 hover:bg-indigo-500/20"
+                                    onClick={async () => {
+                                      try {
+                                        const projectUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/projects/${application.project_id}`
+                                        await navigator.clipboard.writeText(projectUrl)
+                                        alert('案件URLをコピーしました')
+                                      } catch (err) {
+                                        console.error('Failed to copy:', err)
+                                      }
+                                    }}
+                                  >
+                                    <LinkIcon className="h-3 w-3 mr-1" />
+                                    案件URLをコピー
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-500/20 border-2 border-indigo-400/40 flex items-center justify-center text-sm font-bold text-indigo-300">
+                                  2
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-white mb-1">プロジェクト進行</p>
+                                  <p className="text-xs" style={{ color: 'var(--ink-muted-fallback)' }}>
+                                    定期的に進捗を報告し、必要に応じて連絡を取り合ってください
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-3 p-3 rounded-lg bg-white/5 border border-white/10">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-500/20 border-2 border-indigo-400/40 flex items-center justify-center text-sm font-bold text-indigo-300">
+                                  3
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-white mb-1">完了と評価</p>
+                                  <p className="text-xs" style={{ color: 'var(--ink-muted-fallback)' }}>
+                                    プロジェクトが完了したら、企業側から「完了にする」が押された後、評価を行ってください
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2 ml-4">
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                          >
+                            <Link href={`/projects/${application.project_id}`}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              案件詳細
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-white">応募履歴</h2>
+          </div>
+
+          {applications.length === 0 ? (
+            <Card className="glass-panel border-0 rounded-um-lg">
+              <CardContent className="py-12 text-center">
+                <Send className="h-12 w-12 mx-auto mb-4" style={{ color: 'var(--ink-muted-fallback)' }} />
+                <p className="text-lg mb-2 text-white">まだ案件に応募していません</p>
+                <p className="text-sm mb-6" style={{ color: 'var(--ink-muted-fallback)' }}>
+                  案件一覧から興味のある案件を探して、応募してみましょう
+                </p>
+                <Button
+                  asChild
+                  className="union-gradient union-glow h-11 px-6 text-sm font-semibold"
+                >
+                  <Link href="/projects/students">
+                    <ArrowRight className="mr-2 h-4 w-4" />
+                    案件を探す
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {applications
+                .filter((app) => app.status !== 'accepted')
+                .map((application) => (
+                <Card key={application.id} className="glass-panel border-0 rounded-um-lg">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-3">
+                          <h3 className="text-xl font-semibold text-white">{application.project_title}</h3>
+                          {getStatusBadge(application.status || 'pending')}
+                        </div>
+                        <p className="text-sm mb-4 line-clamp-3" style={{ color: 'var(--ink-muted-fallback)' }}>{application.appeal}</p>
+                        <div className="text-xs" style={{ color: 'var(--ink-muted-fallback)' }}>
+                          応募日: {new Date(application.created_at).toLocaleDateString('ja-JP')}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2 ml-4">
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                        >
+                          <Link href={`/projects/${application.project_id}`}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            案件を見る
+                          </Link>
+                        </Button>
+                        {application.status === 'completed' && (
+                          <Button
+                            asChild
+                            size="sm"
+                            variant={application.has_rating ? "outline" : "default"}
+                            className={application.has_rating 
+                              ? "border-yellow-400/40 bg-yellow-500/10 text-yellow-100 hover:bg-yellow-500/20"
+                              : "bg-yellow-600 hover:bg-yellow-700 text-white"
+                            }
+                          >
+                            <Link href={`/ratings/${application.id}`}>
+                              <Star className="mr-2 h-4 w-4" />
+                              {application.has_rating ? '評価を編集' : '評価する'}
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+      <SiteFooter />
+    </div>
+  )
+}
+

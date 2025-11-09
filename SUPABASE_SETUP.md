@@ -38,13 +38,31 @@ Supabase Dashboardで以下の手順でSQLを実行してください：
      - `applications`
      - `waiting_list`
 
-### 2. 認証設定の確認
+### 2. 認証設定の確認（重要）
 
 Supabase Dashboardで以下を確認・設定してください：
 
-1. **Authentication → Settings**
-   - 「Enable Email Signup」が**ON**になっているか確認
-   - 「Confirm email」は開発中は**OFF**でも問題ありません（本番環境ではON推奨）
+1. **Authentication → Settings → Sign In / Providers**
+   - **「Allow new users to sign up」をONにする（必須）**
+     - これがOFFの場合、「Email signups are disabled」エラーが発生します
+   - **「Confirm email」をOFFにする（開発中は必須・SMTP設定前）**
+     - これにより、メール確認なしでユーザーが即座に登録されます
+     - SMTP設定が完了したら、ONに戻すことができます
+   - **「Email」プロバイダーがEnabledになっていることを確認**
+   
+   **設定手順**:
+   1. Supabase Dashboard → Authentication → Settings
+   2. **「Sign In / Providers」タブ**を選択
+   3. **「Allow new users to sign up」のトグルをONにする**（重要！）
+   4. **「Confirm email」のトグルをOFFにする**（開発中）
+   5. 「Email」プロバイダーが「Enabled」になっているか確認
+   6. ページ下部の**「Save changes」**をクリック
+   
+   **⚠️ 注意**: 
+   - 「Allow new users to sign up」がOFFの場合、メールアドレスでの登録ができません
+   - 「Confirm email」がONの場合、メール確認が必要になります（SMTP設定が必要）
+   - 開発環境では「Confirm email」をOFFにして開発を進めることができます
+   - 詳細は `DEVELOPMENT_WITHOUT_SMTP.md` を参照してください
 
 2. **Site URL設定**
    - 「Site URL」に開発環境のURLを設定（例: `http://localhost:3000`）

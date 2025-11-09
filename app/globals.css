@@ -1,55 +1,200 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-/* ダークモード: class戦略 */
-@custom-variant dark (&:is(.dark *));
+/* ============================================
+   Neo-Glass + Ambient Light Design System
+   OKLCHベースの先進トークン（HSLフォールバック付き）
+   ============================================ */
 
-/* カラートークン（サブ色は黒、メインは白＋ブランドグラデ） */
-:root {
-  --background: 0 0% 0%;
-  --foreground: 0 0% 100%;
-  --card: 0 0% 0%;
-  --card-foreground: 0 0% 100%;
-  --popover: 0 0% 0%;
-  --popover-foreground: 0 0% 100%;
-  --primary: 0 0% 100%; /* 白 */
-  --primary-foreground: 0 0% 0%;
-  --secondary: 0 0% 0%; /* 黒 */
-  --secondary-foreground: 0 0% 100%;
-  --muted: 0 0% 9%;
-  --muted-foreground: 0 0% 70%;
-  --accent: 0 0% 9%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 350 85% 55%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 15%;
-  --input: 0 0% 15%;
-  --ring: 215 90% 54%; /* 近い青味のフォーカス */
-  --radius: 0.75rem;
-}
+@layer base {
+  :root {
+    /* ===== 既存HSLトークン（後方互換性のため維持） ===== */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 0%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 9%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 0 0% 9%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 350 85% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 215 90% 54%;
+    --radius: 0.75rem;
 
-/* Tailwind v4: デザイントークン公開 */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 6px);
-  --radius-md: calc(var(--radius) - 3px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 6px);
+    /* ===== 新規OKLCHトークン（Neo-Glass + Ambient Light） ===== */
+    /* HSLフォールバック（OKLCH非対応ブラウザ用、デフォルト値） */
+    --um-blue: hsl(215, 90%, 54%);
+    --um-violet: hsl(280, 75%, 60%);
+    --um-sun: hsl(45, 90%, 75%);
+    --ink: hsl(260, 10%, 20%);
+    --ink-muted: hsl(260, 10%, 65%); /* コントラスト改善：より明るいグレー */
+    --ink-subtle: hsl(260, 10%, 75%); /* サブテキスト用：さらに明るい */
+    --bg-0: hsl(260, 10%, 16%);
+    --bg-1: hsl(260, 10%, 20%);
+    --border-base: hsl(260, 10%, 52% / 0.25);
+    
+    /* フォールバック用のエイリアス（後方互換性） */
+    --um-blue-fallback: var(--um-blue);
+    --um-violet-fallback: var(--um-violet);
+    --um-sun-fallback: var(--um-sun);
+    --ink-fallback: var(--ink);
+    --ink-muted-fallback: var(--ink-muted);
+    --ink-subtle-fallback: var(--ink-subtle);
+    --bg-0-fallback: var(--bg-0);
+    --bg-1-fallback: var(--bg-1);
+    --border-base-fallback: var(--border-base);
+
+    /* Derived tokens */
+    --grad-primary: linear-gradient(35deg, var(--um-blue), var(--um-violet));
+    
+    /* Glass effect */
+    --glass: rgba(0, 0, 0, 0.7);
+    
+    /* Radius scale */
+    --radius-sm: 12px;
+    --radius-md: 16px;
+    --radius-lg: 22px;
+    --radius-xl: 28px;
+
+    /* Elevation scale (Depth) */
+    --elev-0: 0 0 0 rgba(0, 0, 0, 0);
+    --elev-1: 0 8px 24px rgba(0, 0, 0, 0.20);
+    --elev-2: 0 14px 34px rgba(0, 0, 0, 0.28);
+    --elev-3: 0 20px 48px rgba(0, 0, 0, 0.36);
+    --elev-4: 0 28px 64px rgba(0, 0, 0, 0.44);
+
+    /* Focus ring */
+    --focus: oklch(0.76 0.18 255);
+    --focus-fallback: hsl(215, 90%, 65%);
+
+    /* Ambient light (点光源/リムライト) */
+    --light-rim: oklch(0.86 0.15 95 / 0.4);
+    --light-rim-fallback: hsl(45, 90%, 75% / 0.4);
+    --light-spot: oklch(0.90 0.12 95 / 0.6);
+    --light-spot-fallback: hsl(45, 90%, 80% / 0.6);
+  }
+
+  /* Light mode */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg-0: hsl(260, 5%, 98%);
+      --bg-1: hsl(260, 5%, 96%);
+      --ink: hsl(260, 10%, 22%);
+      --ink-muted: hsl(260, 10%, 45%); /* ライトモード用：より暗いグレー */
+      --ink-subtle: hsl(260, 10%, 35%); /* サブテキスト用：さらに暗い */
+      --border-base: hsl(260, 10%, 50% / 0.28);
+      --glass: rgba(255, 255, 255, 0.7);
+    }
+  }
+  
+  /* ダークモード（明示的） */
+  :root[data-theme="dark"],
+  :root:not([data-theme]) {
+    --bg-0: hsl(260, 10%, 16%);
+    --bg-1: hsl(260, 10%, 20%);
+    --ink: hsl(260, 10%, 20%);
+    --ink-muted: hsl(260, 10%, 65%);
+    --ink-subtle: hsl(260, 10%, 75%);
+    --border-base: hsl(260, 10%, 52% / 0.25);
+    --glass: rgba(0, 0, 0, 0.7);
+  }
+  
+  /* ライトモード（明示的） */
+  :root[data-theme="light"] {
+    --bg-0: hsl(260, 5%, 98%);
+    --bg-1: hsl(260, 5%, 96%);
+    --ink: hsl(260, 10%, 22%);
+    --ink-muted: hsl(260, 10%, 45%);
+    --ink-subtle: hsl(260, 10%, 35%);
+    --border-base: hsl(260, 10%, 50% / 0.28);
+    --glass: rgba(255, 255, 255, 0.7);
+  }
+
+  /* High-contrast mode */
+  :root[data-contrast="high"] {
+    --border-base: oklch(0.40 0.02 260 / 0.6);
+    --border-base-fallback: hsl(260, 10%, 40% / 0.6);
+  }
+
+  /* Colorblind support (deuteranopia) */
+  :root[data-colorblind="deuteranopia"] {
+    --um-sun: oklch(0.86 0.12 110);
+    --um-sun-fallback: hsl(50, 80%, 75%);
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* OKLCH対応ブラウザではOKLCH値を使用（HSLを上書き） */
+  @supports (color: oklch(0 0 0)) {
+    :root {
+      --um-blue: oklch(0.68 0.17 255);
+      --um-violet: oklch(0.66 0.18 305);
+      --um-sun: oklch(0.86 0.15 95);
+      --ink: oklch(0.21 0.02 260);
+      --ink-muted: oklch(0.65 0.02 260);
+      --ink-subtle: oklch(0.75 0.02 260);
+      --bg-0: oklch(0.16 0.02 260);
+      --bg-1: oklch(0.20 0.02 260);
+      --border-base: oklch(0.52 0.02 260 / 0.25);
+      --grad-primary: linear-gradient(35deg, var(--um-blue), var(--um-violet));
+      --glass: color-mix(in oklch, var(--bg-0) 70%, transparent);
+    }
+
+    /* Light mode (OKLCH) */
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-0: oklch(0.98 0.01 260);
+        --bg-1: oklch(0.96 0.01 260);
+        --ink: oklch(0.22 0.02 260);
+        --ink-muted: oklch(0.45 0.02 260);
+        --ink-subtle: oklch(0.35 0.02 260);
+        --border-base: oklch(0.50 0.02 260 / 0.28);
+        --glass: color-mix(in oklch, white 70%, transparent);
+      }
+    }
+    
+    /* ダークモード（明示的、OKLCH） */
+    :root[data-theme="dark"],
+    :root:not([data-theme]) {
+      --bg-0: oklch(0.16 0.02 260);
+      --bg-1: oklch(0.20 0.02 260);
+      --ink: oklch(0.21 0.02 260);
+      --ink-muted: oklch(0.65 0.02 260);
+      --ink-subtle: oklch(0.75 0.02 260);
+      --border-base: oklch(0.52 0.02 260 / 0.25);
+      --glass: color-mix(in oklch, var(--bg-0) 70%, transparent);
+    }
+    
+    /* ライトモード（明示的、OKLCH） */
+    :root[data-theme="light"] {
+      --bg-0: oklch(0.98 0.01 260);
+      --bg-1: oklch(0.96 0.01 260);
+      --ink: oklch(0.22 0.02 260);
+      --ink-muted: oklch(0.45 0.02 260);
+      --ink-subtle: oklch(0.35 0.02 260);
+      --border-base: oklch(0.50 0.02 260 / 0.28);
+      --glass: color-mix(in oklch, white 70%, transparent);
+    }
+  }
 }
 
 /* Base */
@@ -59,30 +204,102 @@
   body { @apply bg-background text-foreground; }
 }
 
-/* ブランドユーティリティ（新配色） */
+/* ============================================
+   ブランドユーティリティ（既存 + 新規）
+   ============================================ */
+
+/* 既存のunion-gradient（後方互換性のため維持） */
 .union-gradient,
 .brand-gradient {
   background: linear-gradient(90deg, #066ff2 0%, #ec4faf 100%);
+  /* 新トークンも適用 */
+  background: var(--grad-primary);
 }
+
+/* 新規：HDR-Gradient（主役のみに使用） */
+.union-gradient-hdr {
+  background: var(--grad-primary);
+}
+
 .union-text-gradient,
 .brand-text-gradient {
   background: linear-gradient(90deg, #066ff2 0%, #ec4faf 100%);
+  background: var(--grad-primary);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-/* 黒ベースのカード（ガラス感は控えめに） */
+/* 既存のunion-card（後方互換性のため維持） */
 .union-card {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(8px);
 }
 
-/* 小さめの外側グロー（青→ピンクの影） */
+/* 既存のunion-glow（後方互換性のため維持） */
 .union-glow {
   box-shadow:
     0 0 0 1px rgba(255,255,255,0.06),
     0 8px 30px rgba(6,111,242,0.25),
     0 4px 20px rgba(236,79,175,0.15);
+}
+
+/* ============================================
+   Neo-Glass ユーティリティ（新規）
+   ============================================ */
+
+/* Glass Panel（低ノイズのガラス感） */
+.glass-panel {
+  background: var(--glass);
+  border: 1px solid var(--border-base);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: var(--elev-1);
+}
+
+/* Glass Outline（境界線のみ） */
+.glass-outline {
+  background: transparent;
+  border: 1px solid var(--border-base);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Depth Scale（Elevation） */
+.elev-0 { box-shadow: var(--elev-0); }
+.elev-1 { box-shadow: var(--elev-1); }
+.elev-2 { box-shadow: var(--elev-2); }
+.elev-3 { box-shadow: var(--elev-3); }
+.elev-4 { box-shadow: var(--elev-4); }
+
+/* Ambient Light（点光源/リムライト） */
+.light-rim {
+  box-shadow: 
+    0 0 0 1px var(--light-rim-fallback),
+    0 0 0 1px var(--light-rim),
+    0 0 20px var(--light-rim-fallback),
+    0 0 20px var(--light-rim);
+}
+
+.light-spot {
+  box-shadow: 
+    0 0 40px var(--light-spot-fallback),
+    0 0 40px var(--light-spot);
+}
+
+/* Silent Motion（0→1の瞬間のみ） */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.motion-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-fade-in {
+    animation: none;
+  }
 }

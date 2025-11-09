@@ -18,9 +18,11 @@ const adminEmailEnv =
   process.env.NEXT_PUBLIC_ADMIN_EMAILS
 
 // Fallback email allowlist so operators can elevate accounts without editing app_metadata.
+// gakusei.union226@gmail.com をデフォルトで管理者として追加
+const DEFAULT_ADMIN_EMAILS = ['gakusei.union226@gmail.com']
 const ADMIN_EMAILS = adminEmailEnv
-  ? adminEmailEnv.split(',').map((email) => email.trim().toLowerCase()).filter(Boolean)
-  : []
+  ? [...DEFAULT_ADMIN_EMAILS, ...adminEmailEnv.split(',').map((email) => email.trim().toLowerCase())].filter(Boolean)
+  : DEFAULT_ADMIN_EMAILS
 
 function isAdminUser(user: User | null | undefined): boolean {
   if (!user) return false

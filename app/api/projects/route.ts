@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import { bootstrapSchema, isMissingRelationError, ensureSchemaOnce } from '@/lib/db/bootstrap'
+import { requireCompany } from '@/lib/auth/user'
 
 async function insertProject(payload: {
   title: string
@@ -9,6 +10,7 @@ async function insertProject(payload: {
   description: string
   contact_info: string
   company_id?: string | null
+  target_type?: 'student' | 'organization' | 'both' | null
 }) {
   const supabase = createServerClient()
   return supabase
@@ -21,14 +23,30 @@ async function insertProject(payload: {
       contact_info: payload.contact_info,
       status: 'review',
       company_id: payload.company_id || null,
+      target_type: payload.target_type || 'organization',
     })
     .select()
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const companyAuth = await requireCompany(request)
+    if (!companyAuth) {
+      return NextResponse.json(
+        { error: '企業アカウントでログインしてください' },
+        { status: 401 },
+      )
+    }
+
+    if (!companyAuth.companyId) {
+      return NextResponse.json(
+        { error: '企業情報が紐づいていないアカウントです' },
+        { status: 403 },
+      )
+    }
+
     const body = await request.json()
-    const { title, budget, deadline, description, contact_info, company_id } = body
+    const { title, budget, deadline, description, contact_info, target_type } = body
 
     if (!title || !description || !contact_info) {
       return NextResponse.json(
@@ -46,7 +64,8 @@ export async function POST(request: NextRequest) {
       deadline: deadline || null,
       description,
       contact_info,
-      company_id: company_id || null,
+      company_id: companyAuth.companyId,
+      target_type: target_type || 'organization',
     })
 
     if (error && isMissingRelationError(error)) {
@@ -57,7 +76,8 @@ export async function POST(request: NextRequest) {
         deadline: deadline || null,
         description,
         contact_info,
-        company_id: company_id || null,
+        company_id: companyAuth.companyId,
+        target_type: target_type || 'organization',
       })
       data = retry.data
       error = retry.error
